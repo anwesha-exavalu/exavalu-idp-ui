@@ -10,6 +10,7 @@ import { DashboradStyled } from "../../styles/pages/DasboardCM";
 import { Row, Col, Typography, Card } from "antd";
 import { getStaticTextConfig } from "../../data/getStaticTextConfig";
 import DocumentInventory from "../../subfeatures/DocumentInventoryMaster/DocumentInventory";
+import UploadFileScreen from "../UploadFileContents/UploadFileScreen";
 
 const DashboardCM = () => {
   // const { Title, Text } = Typography;
@@ -95,13 +96,14 @@ const DashboardCM = () => {
   return (
     <>
       <DashboradStyled>
-        <Row>
+       
           {activeTab === 0 && (
-            <DocumentInventory
-              widgetStaticData={widgets.myDocuments.documentInventory}
-            />
+            // <DocumentInventory
+            //   widgetStaticData={widgets.myDocuments.documentInventory}
+            // />
+            <UploadFileScreen/>
           )}
-        </Row>
+      
       </DashboradStyled>
     </>
   );

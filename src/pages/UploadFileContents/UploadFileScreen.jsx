@@ -268,7 +268,7 @@ const UploadFileScreen = () => {
         formData.append("file", file);
 
         const response = await axios.post(
-          `${import.meta.env.VITE_AI_EXTRACT}/api/v1/document-ingestion/upload`,
+          `${import.meta.env.VITE_AI_EXTRACT}/api/upload`,
           formData,
           {
             headers: {
@@ -318,9 +318,9 @@ const UploadFileScreen = () => {
     try {
       //setLoader(true)
       setLoading(true);
-      setLoadingText("Drawing Mindmap...");
+      setLoadingText("Extracting Document....");
       const response = await axios.get(
-        `${import.meta.env.VITE_AI_EXTRACT}/api/v1/document-ingestion/extract-document/${submissionId}`,
+        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document/${submissionId}`,
         {
           headers: {
             "Content-Type": "application/json",
