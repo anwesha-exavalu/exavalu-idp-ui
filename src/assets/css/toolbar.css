@@ -1,0 +1,100 @@
+.toolbar-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 0;
+  align-items: center;
+}
+.custom-select {
+  min-width: 120px;
+  padding: 4px 12px;
+  border: 1px solid teal;
+  border-radius: 6px;
+  background: #fff;
+  color: #004d40;
+}
+
+.custom-select .ant-select-selector {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 4px 8px;
+}
+
+.custom-select .ant-select-arrow {
+  color: teal;
+}
+
+.custom-select-dropdown {
+  border-radius: 6px;
+}
+
+.custom-search {
+  width: 160px;
+  border: 1px solid teal;
+  color: teal;
+}
+
+.custom-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid teal;
+  color: teal;
+}
+
+.custom-select,
+.custom-action-btn,
+.custom-search input {
+  color: #006172 !important;
+  font-family: "Open Sans", sans-serif !important;
+  font-size: 13px !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+  line-height: normal !important;
+}
+.custom-select .ant-select-selection-placeholder,
+.custom-select .ant-select-selection-item,
+.ant-picker-input input::placeholder {
+  color: #006172 !important;
+  font-family: "Open Sans", sans-serif !important;
+  font-size: 13px !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+  line-height: normal !important;
+}
+
+.custom-action-btn {
+  border: 1px solid #006172;
+  color: #006172;
+  font-weight: 600;
+  font-size: 13px;
+  font-family: "Open Sans", sans-serif;
+  padding: 0 12px;
+}
+
+.custom-search input {
+  border-radius: 6px;
+  height: 32px;
+  border: 1px solid teal;
+}
+
+.custom-search input {
+  color: #006172 !important;
+  font-family: "Open Sans", sans-serif !important;
+  font-size: 13px !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+  line-height: normal !important;
+  border-radius: 6px;
+}
+
+.custom-search input::placeholder {
+  color: #006172 !important;
+  font-family: "Open Sans", sans-serif !important;
+  font-size: 13px !important;
+  font-style: normal !important;
+  font-weight: 600 !important;
+  line-height: normal !important;
+  opacity: 1;
+}

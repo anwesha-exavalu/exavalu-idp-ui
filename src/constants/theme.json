@@ -1,0 +1,34 @@
+{
+  "dark": {
+    "bg": "#121212",
+    "bgImg": "headerbg-dark.png",
+    "dashboardCardBg": "#A6D9FF",
+    "dashboardCardValueBg": "#FFFFFF",
+    "dashboardCardTitle": "#054F7D",
+    "dashboardCardDesc": "#263C4D",
+    "dashboardGraphBg": "#444444",
+    "dashboardGraphBoxShadow": "none",
+    
+    "zoomButtonBg": "#F3F5F6",
+    "headerButtonBg": "#F3F5F6",
+    "scrollbarTrackBg": "#f8f9fa",
+    "scrollbarThumbBg": "#D7D7D7",
+    "scrollbarThumbHoverBg": "#495057"
+  },
+  "light": {
+    "bg": "#FFFFFF",
+    "bgImg": "headerbg.png",
+    "dashboardCardBg": "#eef6ff",
+    "dashboardCardValueBg": "#bde5fe",
+    "dashboardCardTitle": "black",
+    "dashboardCardDesc": "#4F4F4F",
+    "dashboardGraphBg": "#fff",
+    "dashboardGraphBoxShadow": "2px 5px 6px 6px #bebebe33",
+    
+    "zoomButtonBg": "#F3F5F6",
+    "headerButtonBg": "#F3F5F6",
+    "scrollbarTrackBg": "#f8f9fa",
+    "scrollbarThumbBg": "#D7D7D7",
+    "scrollbarThumbHoverBg": "#495057"
+  }
+}
