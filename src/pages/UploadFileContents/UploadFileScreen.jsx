@@ -14,12 +14,10 @@ import { DashboradStyled } from "../../styles/pages/DasboardCM";
 import {
   UploadHeader,
   UploadTitle,
-
   ProgressText,
 } from "../../styles/pages/UploadFile";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
-
 
 const UPLOAD_CONFIG = {
   enableFileTypeRestriction: true,
@@ -27,48 +25,32 @@ const UPLOAD_CONFIG = {
   allowedMimeTypes: ["application/pdf"],
   restrictionErrorMessage:
     "Only PDF files are allowed. Please select a PDF file.",
-  getUploadLabels: function () {
-    if (
-      this.enableFileTypeRestriction &&
-      this.allowedExtensions.length === 1 &&
-      this.allowedExtensions[0] === ".pdf"
-    ) {
-      return {
-        formats: [".pdf"],
-        label1: "Drag & Drop your PDF file here",
-        label2: "or click to browse and select a PDF file",
-      };
-    }
+  getUploadLabels() {
     return {
-      formats: this.allowedExtensions,
-      label1: "Drag & Drop your file here",
-      label2: "or click to browse and select a file",
+      formats: [".pdf"],
+      label1: "Drag & Drop your PDF file here",
+      label2: "or click to browse and select a PDF file",
     };
   },
 };
 
 const fileStorage = {
   files: new Map(),
-
-  storeFile: function (fileId, fileData) {
-    this.files.set(fileId, fileData);
+  storeFile(id, data) {
+    this.files.set(id, data);
   },
-
-  getFile: function (fileId) {
-    return this.files.get(fileId);
+  getFile(id) {
+    return this.files.get(id);
   },
-
-  getAllFiles: function () {
-    return Array.from(this.files.values());
-  },
-
-  removeFile: function (fileId) {
-    this.files.delete(fileId);
+  removeFile(id) {
+    this.files.delete(id);
   },
 };
 
 const UploadFileScreen = () => {
   const navigate = useNavigate();
+  const { setLoader } = useLoader();
+
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -77,41 +59,29 @@ const UploadFileScreen = () => {
   const [showDataExtraction, setShowDataExtraction] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [apiExtractedData, setApiExtractedData] = useState(null);
-  const user = useSelector((state) => state.user);
-  const dataCount = useSelector((state) => state.dataCount);
-  const firstname = useSelector((state) => state.user.firstname);
-  const staticText = getStaticTextConfig(firstname, dataCount);
-  const role = user.role;
-  const { setLoader } = useLoader();
   const [extractedElementsCount, setExtractedElementsCount] = useState(0);
 
+  const user = useSelector((state) => state.user);
+  const dataCount = useSelector((state) => state.dataCount);
+  const firstname = user.firstname;
+  const role = user.role;
+  const staticText = getStaticTextConfig(firstname, dataCount);
 
   const validateFile = (fileToValidate) => {
-    if (!UPLOAD_CONFIG.enableFileTypeRestriction) {
-      return { isValid: true, error: null };
-    }
-
     const fileName = fileToValidate.name.toLowerCase();
     const fileType = fileToValidate.type.toLowerCase();
 
     const hasValidExtension = UPLOAD_CONFIG.allowedExtensions.some((ext) =>
-      fileName.endsWith(ext.toLowerCase())
+      fileName.endsWith(ext)
     );
-
-
-    const hasValidMimeType = UPLOAD_CONFIG.allowedMimeTypes.some(
-      (mimeType) => fileType === mimeType.toLowerCase()
-    );
+    const hasValidMimeType = UPLOAD_CONFIG.allowedMimeTypes.includes(fileType);
 
     if (!hasValidExtension || !hasValidMimeType) {
-      return {
-        isValid: false,
-        error: UPLOAD_CONFIG.restrictionErrorMessage,
-      };
+      return { isValid: false, error: UPLOAD_CONFIG.restrictionErrorMessage };
     }
-
-    return { isValid: true, error: null };
+    return { isValid: true };
   };
+
   const resetComponentState = () => {
     setFile(null);
     setUploading(false);
@@ -125,67 +95,37 @@ const UploadFileScreen = () => {
     setLoader(false);
   };
 
+  useEffect(() => resetComponentState, []);
+
   const handleStrIntelligenceNavigation = (e) => {
     e.preventDefault();
-
     resetComponentState();
-
     navigate("/str-intelligence", { replace: true });
   };
 
-  useEffect(() => {
-    return () => {
-      resetComponentState();
-    };
-  }, []);
+  const generateFileId = () =>
+    `file_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-  const callExtractionAPI = async (file, submissionId) => {
+  const callExtractionAPI = async (submissionId) => {
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await axios.post(
-        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document/${submissionId}`,
-        formData,
+      const response = await axios.get(
+        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document`,
         {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        params: { submission_id: submissionId },
+      }
       );
-
       setApiExtractedData(response.data);
       return response.data;
     } catch (error) {
-      console.error("Error calling extraction API:", error);
-      alert("Failed to extract data from the file. Please try again.");
+      console.error("Extraction failed:", error);
+      alert("Failed to extract data");
       setLoader(false);
       setIsProcessing(false);
       return null;
     }
   };
 
-  const handleDataFieldsCountChange = (count) => {
-    setExtractedElementsCount(count);
-    if (currentStoredFile) {
-      const updatedFileData = {
-        ...currentStoredFile,
-        uploadDetails: {
-          ...currentStoredFile.uploadDetails,
-          extractedElements: count,
-        },
-      };
-      fileStorage.storeFile(currentStoredFile.id, updatedFileData);
-      setCurrentStoredFile(updatedFileData);
-    }
-  };
-
-  const generateFileId = () => {
-    return `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  };
-
   const handleUpload = async (fileToUpload) => {
-
     const validation = validateFile(fileToUpload);
     if (!validation.isValid) {
       alert(validation.error);
@@ -196,299 +136,152 @@ const UploadFileScreen = () => {
     setFile(fileToUpload);
     setUploading(true);
     setUploadProgress(0);
-    setUploadDetails(null);
     setShowDataExtraction(false);
-    setIsProcessing(false);
     setApiExtractedData(null);
 
-    let pageCount = 0;
-    if (fileToUpload.type === "application/pdf") {
-      try {
-        const pdfData = await fileToUpload.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
-        pageCount = pdfDoc.numPages;
-      } catch (err) {
-        console.error("Failed to read PDF pages", err);
-      }
+    let pageCount = "N/A";
+    try {
+      const pdfData = await fileToUpload.arrayBuffer();
+      const pdfDoc = await pdfjsLib.getDocument({ data: pdfData }).promise;
+      pageCount = pdfDoc.numPages;
+    } catch (err) {
+      console.warn("PDF page count failed");
     }
-
-    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
-      const res = await axios.post(
+      formData.append("file", fileToUpload); // ✅ FIXED
+
+      const uploadRes = await axios.post(
         `${import.meta.env.VITE_AI_EXTRACT}/api/upload`,
         formData,
         {
-          headers: {
-            "Content-Type": "multipart/form-data",
-
+          headers: { "Content-Type": "multipart/form-data" },
+          onUploadProgress: (e) => {
+            const percent = Math.round((e.loaded * 100) / e.total);
+            setUploadProgress(percent);
           },
         }
       );
 
-      const submissionId = res.data.submission_id;
-
-
-
       setUploading(false);
       setIsProcessing(true);
       setLoader(true);
-      await sleep(2000);
-      const extractedApiData = await callExtractionAPI(fileToUpload, submissionId);
 
-      if (extractedApiData) {
-        let pdfUrl = null;
-        if (extractedApiData.pdf_data?.startsWith("data:")) {
-          pdfUrl = extractedApiData.pdf_data;
-        } else if (extractedApiData.pdf_data) {
-          pdfUrl = `data:application/pdf;base64,${extractedApiData.pdf_data}`;
-        }
+      const extractedData = await callExtractionAPI(
+        uploadRes.data.submission_id
+      );
+      if (!extractedData) return;
 
-        const fileData = {
-          id: fileId,
-          name: extractedApiData.filename || fileToUpload.name,
-          type: "application/pdf",
-          size: fileToUpload.size,
-          data: pdfUrl,
-          uploadCompleted: true,
-          extractedData: extractedApiData,
-        };
+      const pdfUrl = extractedData.pdf_data?.startsWith("data:")
+        ? extractedData.pdf_data
+        : `data:application/pdf;base64,${extractedData.pdf_data}`;
 
-        const detailsResponse = {
-          pages: pageCount,
-          anomalies: 0,
-          extractedElements: 0,
-          missingElements: 0,
-          successMessage:
-            "Your file has been identified from the master documents inventory, associated with an active plan and no data anomalies were found.",
-        };
+      const fileData = {
+        id: fileId,
+        name: extractedData.filename || fileToUpload.name,
+        type: "application/pdf",
+        size: fileToUpload.size,
+        data: pdfUrl,
+        uploadCompleted: true,
+        extractedData,
+      };
 
-        setUploadDetails(detailsResponse);
-        fileData.uploadDetails = detailsResponse;
-        fileStorage.storeFile(fileId, fileData);
-        setCurrentStoredFile(fileData);
+      const details = {
+        pages: pageCount,
+        anomalies: 0,
+        extractedElements: 0,
+        missingElements: 0,
+        successMessage:
+          "Your file has been identified from the master documents inventory with no anomalies.",
+      };
 
-        setLoader(false);
-        setIsProcessing(false);
-        setShowDataExtraction(true);
-      } else {
-        setLoader(false);
-        setIsProcessing(false);
-      }
+      fileData.uploadDetails = details;
+      fileStorage.storeFile(fileId, fileData);
+
+      setUploadDetails(details);
+      setCurrentStoredFile(fileData);
+      setShowDataExtraction(true);
     } catch (err) {
-      console.error("Upload Failed", err);
-      alert("Upload Failed");
-      setUploading(false);
+      console.error("Upload failed:", err);
+      alert("Upload failed");
+    } finally {
       setIsProcessing(false);
       setLoader(false);
     }
   };
 
-  useEffect(() => {
-    if (extractedElementsCount > 0 && uploadDetails) {
-      const updatedDetails = {
-        ...uploadDetails,
-        extractedElements: extractedElementsCount,
-      };
-      setUploadDetails(updatedDetails);
+  const handleDataFieldsCountChange = (count) => {
+    setExtractedElementsCount(count);
+    if (uploadDetails) {
+      setUploadDetails({ ...uploadDetails, extractedElements: count });
     }
-  }, [extractedElementsCount]);
-
-  const renderUploadCard = () => {
-    if (!file) return null;
-
-    return (
-      <div
-        style={{
-          border: "1px solid #00837A",
-          borderRadius: "8px",
-          padding: "12px",
-          background: "#FAFBFC",
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img src={pdfIcon} alt="PDF" style={{ width: 24, height: 24 }} />
-            <span
-              style={{ fontSize: "16px", color: "#000", fontWeight: "600" }}
-            >
-              {file?.name}
-            </span>
-          </div>
-          <ProgressText>
-            {uploadProgress < 100
-              ? `${uploadProgress}% Complete`
-              : isProcessing
-                ? "Processing..."
-                : "100% Complete"}
-          </ProgressText>
-        </div>
-        <div
-          style={{
-            height: "12px",
-            marginTop: "8px",
-            borderRadius: "8px",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              width: `${uploadProgress}%`,
-              background: "#00796b",
-              transition: "width 0.3s ease",
-            }}
-          ></div>
-        </div>
-        {uploadProgress < 100 && (
-          <p style={{ fontSize: "14px", color: "#555" }}>
-            Uploading file... Please wait.
-          </p>
-        )}
-
-        {uploadProgress === 100 && isProcessing && (
-          <p style={{ fontSize: "14px", color: "#555" }}>
-            Processing file data... Please wait.
-          </p>
-        )}
-
-        {uploadProgress === 100 && !isProcessing && uploadDetails && (
-          <>
-            <p
-              style={{
-                fontSize: "15px",
-                fontWeight: "600",
-                color: "#212121",
-                textAlign: "left",
-                marginTop: "0",
-              }}
-            >
-              <strong style={{ color: "#006172" }}>Success!</strong>{" "}
-              {uploadDetails.successMessage}
-            </p>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                rowGap: "4px",
-                columnGap: "30px",
-                fontSize: "14px",
-                textAlign: "left",
-              }}
-            >
-              <span>
-                Document Pages: <strong>{uploadDetails.pages}</strong>
-              </span>
-              <span>
-                Data Anomalies: <strong>{uploadDetails.anomalies}</strong>
-              </span>
-              <span>
-                Data elements extracted:{" "}
-                <strong>{uploadDetails.extractedElements}</strong>
-              </span>
-              <span>
-                Missing Data Elements:{" "}
-                <strong>{uploadDetails.missingElements}</strong>
-              </span>
-            </div>
-          </>
-        )}
-      </div>
-    );
   };
-
 
   const uploadLabels = UPLOAD_CONFIG.getUploadLabels();
 
   return (
-    <div style={{ marginTop: "40px" }}>
+    <div style={{ marginTop: 40 }}>
       <Breadcrumb>
         <Breadcrumb.Item>
-          <a
-            href="#"
-            style={{ color: "#00837A" }}
-            onClick={handleStrIntelligenceNavigation}
-          >
-            STR Intelligence
-          </a>
+          <a onClick={handleStrIntelligenceNavigation}>STR Intelligence</a>
         </Breadcrumb.Item>
-        <Breadcrumb.Item>
-          <span style={{ color: "black" }}>Upload</span>
-        </Breadcrumb.Item>
+        <Breadcrumb.Item>Upload</Breadcrumb.Item>
       </Breadcrumb>
 
       <DashboradStyled>
-        <Row gutter={[16, 16]} className="dashboard-row">
-          <Col xs={24} xl={24} lg={24} md={24}>
-            <Card className="dashboard-card">
-              <UploadHeader style={{ marginTop: "-20" }}>
+        <Row gutter={[16, 16]}>
+          <Col span={24}>
+            <Card>
+              <UploadHeader>
                 <UploadTitle>
                   {staticText[role].widgets.uploadFile.title}
                 </UploadTitle>
               </UploadHeader>
 
-              <div style={{ position: "relative", minHeight: "150px" }}>
-                {!file && (
-                  <div
-                    style={{
-                      opacity: uploading ? 0 : 1,
-                      transition: "opacity 0.5s ease",
-                    }}
-                  >
-                    <FileUploadContainer
-                      onFileUpload={handleUpload}
-                      supportedFormats={uploadLabels.formats}
-                      label1={uploadLabels.label1}
-                      label2={uploadLabels.label2}
-                    />
+              {!file && (
+                <FileUploadContainer
+                  onFileUpload={handleUpload}
+                  supportedFormats={uploadLabels.formats}
+                  label1={uploadLabels.label1}
+                  label2={uploadLabels.label2}
+                />
+              )}
+
+              {file && (
+                <>
+                  <div style={{ marginTop: 20 }}>
+                    <img src={pdfIcon} alt="pdf" width={24} />
+                    <ProgressText>
+                      {uploadProgress < 100
+                        ? `${uploadProgress}% Uploading`
+                        : isProcessing
+                        ? "Processing..."
+                        : "Completed"}
+                    </ProgressText>
                   </div>
-                )}
 
-                {file && (
-                  <>
-                    {renderUploadCard()}
-
-                    {showDataExtraction && currentStoredFile && (
-                      <div style={{ marginTop: "20px" }}>
-                        <ExtractedInfoTable extractedData={apiExtractedData} />
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                  {showDataExtraction && currentStoredFile && (
+                    <>
+                      {/* <ExtractedInfoTable
+                        extractedData={apiExtractedData}
+                      /> */}
+                      <DataExtractionScreen
+                        uploadedFileName={currentStoredFile.name}
+                        uploadedFileUrl={currentStoredFile.data}
+                        storedFileData={currentStoredFile}
+                        apiExtractedData={apiExtractedData}
+                        onDataFieldsCountChange={
+                          handleDataFieldsCountChange
+                        }
+                      />
+                    </>
+                  )}
+                </>
+              )}
             </Card>
           </Col>
         </Row>
-        {showDataExtraction && currentStoredFile && (
-          <Row gutter={[16, 16]} className="dashboard-row">
-            <Col xs={24} xl={24} lg={24} md={24}>
-              <Card className="dashboard-card">
-                <div style={{ marginTop: "20px" }}>
-                  <DataExtractionScreen
-                    key={currentStoredFile.id} // Force re-render with key
-                    uploadedFile={null}
-                    uploadedFileName={currentStoredFile.name}
-                    uploadedFileUrl={currentStoredFile.data}
-                    storedFileData={currentStoredFile}
-                    apiExtractedData={apiExtractedData}
-                    onDataFieldsCountChange={handleDataFieldsCountChange}
-                  />
-                </div>
-              </Card>
-            </Col>
-          </Row>
-        )}
       </DashboradStyled>
     </div>
   );
