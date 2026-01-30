@@ -3,37 +3,23 @@ import axios from "axios";
 import FileUploadContainer from "components/FileUploadContainer";
 import DataExtractionScreen from "./ExtractedData";
 import { Row, Col, Card, Breadcrumb } from "antd";
+import pdfIcon from "../../assets/images/pdf-icon.png";
 import * as pdfjsLib from "pdfjs-dist";
 import ExtractedInfoTable from "./ExtractedInfoTable";
 import { getStaticTextConfig } from "../../data/getStaticTextConfig";
 import { useNavigate } from "react-router-dom";
 import useLoader from "context/loader";
 import { useSelector } from "react-redux";
-import { useDispatch } from "react-redux";
 import { DashboradStyled } from "../../styles/pages/DasboardCM";
-import { setExtractionProgress } from "../../features/Extraction-slice/extractionProgressSlice"
-import tickmark from "../../assets/images/tickmark.png"
-import BackgroundIcon from "../../assets/images/BackgroundIcon.png"
-import spinnerbox from "../../assets/images/spinnerbox.png"
-
-import SockJS from "sockjs-client";
-import Stomp from "stompjs";
 import {
   UploadHeader,
   UploadTitle,
+
   ProgressText,
 } from "../../styles/pages/UploadFile";
-import ChatPromptIcon from "../../assets/images/chat-prompt.png";
-import ChatPropmpt from "../ChatPrompt";
-import TreeMapView from "../../components/Chart/TreeMapView"
-//import { sampleTree } from "../../data/sampleTree"
-import timericon from "../../assets/images/timericon.png"
-import { Spin } from "antd";
-
-import { updateProgressState } from "../../features/progress-submission/ProgressSubmissionSlice";
-//import FloatingExtractor from "../../pages/UploadFileContents/FloatingExtractionWidget";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 
 const UPLOAD_CONFIG = {
   enableFileTypeRestriction: true,
@@ -89,30 +75,17 @@ const UploadFileScreen = () => {
   const [uploadDetails, setUploadDetails] = useState(null);
   const [currentStoredFile, setCurrentStoredFile] = useState(null);
   const [showDataExtraction, setShowDataExtraction] = useState(false);
-  const [, setIsProcessing] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [apiExtractedData, setApiExtractedData] = useState(null);
-  const dispatch = useDispatch();
   const user = useSelector((state) => state.user);
   const dataCount = useSelector((state) => state.dataCount);
   const firstname = useSelector((state) => state.user.firstname);
   const staticText = getStaticTextConfig(firstname, dataCount);
-  const [loading, setLoading] = useState(false);
-  const [loadingText, setLoadingText] = useState("");
-
   const role = user.role;
   const { setLoader } = useLoader();
   const [extractedElementsCount, setExtractedElementsCount] = useState(0);
-   const [documentinventoryid, setDocumentinventoryid] = useState(null);
-  const [showChatWindow, setShowChatWindow] = useState(false);
-  const [activeTab, setActiveTab] = useState("validate");
-  const [, setExtractionData] = useState(null);
-  const [minddata, setMinddata] = useState({});
-  const [headerData, setHeaderData] = useState({});
 
-  const pfileName = useSelector((state) => state.progressSubmission.fileName);
-  const psubmissionId = useSelector((state) => state.progressSubmission.submissionId);
-  const pstatus = useSelector((state) => state.progressSubmission.status);
-  const pprogress = useSelector((state) => state.progressSubmission.progress);
+
   const validateFile = (fileToValidate) => {
     if (!UPLOAD_CONFIG.enableFileTypeRestriction) {
       return { isValid: true, error: null };
@@ -124,6 +97,7 @@ const UploadFileScreen = () => {
     const hasValidExtension = UPLOAD_CONFIG.allowedExtensions.some((ext) =>
       fileName.endsWith(ext.toLowerCase())
     );
+
 
     const hasValidMimeType = UPLOAD_CONFIG.allowedMimeTypes.some(
       (mimeType) => fileType === mimeType.toLowerCase()
@@ -152,11 +126,11 @@ const UploadFileScreen = () => {
   };
 
   const handleStrIntelligenceNavigation = (e) => {
-    // e.preventDefault();
+    e.preventDefault();
 
     resetComponentState();
 
-    navigate("/dashboard", { replace: true });
+    navigate("/str-intelligence", { replace: true });
   };
 
   useEffect(() => {
@@ -164,6 +138,32 @@ const UploadFileScreen = () => {
       resetComponentState();
     };
   }, []);
+
+  const callExtractionAPI = async (file, submissionId) => {
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await axios.post(
+        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document/${submissionId}`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      setApiExtractedData(response.data);
+      return response.data;
+    } catch (error) {
+      console.error("Error calling extraction API:", error);
+      alert("Failed to extract data from the file. Please try again.");
+      setLoader(false);
+      setIsProcessing(false);
+      return null;
+    }
+  };
 
   const handleDataFieldsCountChange = (count) => {
     setExtractedElementsCount(count);
@@ -185,12 +185,14 @@ const UploadFileScreen = () => {
   };
 
   const handleUpload = async (fileToUpload) => {
+
     const validation = validateFile(fileToUpload);
     if (!validation.isValid) {
       alert(validation.error);
       return;
     }
 
+    const fileId = generateFileId();
     setFile(fileToUpload);
     setUploading(true);
     setUploadProgress(0);
@@ -209,36 +211,80 @@ const UploadFileScreen = () => {
         console.error("Failed to read PDF pages", err);
       }
     }
-    setUploadProgress(100); // ⬅ triggers useEffect
-    dispatch(updateProgressState({ progress: 100 }));
 
-    setUploading(false);
-    setIsProcessing(true);
-  };
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  const extractionprogress = useSelector(
-    (state) => state.extractionProgress.extractionProgress
-  );
-  const hasTriggeredRef = React.useRef(false);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axios.post(
+        `${import.meta.env.VITE_AI_EXTRACT}/api/upload`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
 
-  useEffect(() => {
-    if (hasTriggeredRef.current) return; // avoid duplicate calls
+          },
+        }
+      );
 
-    const isUploadDone = uploadProgress === 100;
-    const isExtractionDone = extractionprogress === 100;
-    const isFirstLoad = !file && isExtractionDone; // coming from another route
+      const submissionId = res.data.submission_id;
 
-    if ((isUploadDone || isFirstLoad) && !apiExtractedData) {
-      hasTriggeredRef.current = true;
-      // triggerExtraction(file);
-      const token = localStorage.getItem("token");
-      //const submissionId = localStorage.getItem("submissionId");
-      if (psubmissionId !== null && psubmissionId !== undefined) {
-        fetchMindmapData(psubmissionId, token);
+
+
+      setUploading(false);
+      setIsProcessing(true);
+      setLoader(true);
+      await sleep(2000);
+      const extractedApiData = await callExtractionAPI(fileToUpload, submissionId);
+
+      if (extractedApiData) {
+        let pdfUrl = null;
+        if (extractedApiData.pdf_data?.startsWith("data:")) {
+          pdfUrl = extractedApiData.pdf_data;
+        } else if (extractedApiData.pdf_data) {
+          pdfUrl = `data:application/pdf;base64,${extractedApiData.pdf_data}`;
+        }
+
+        const fileData = {
+          id: fileId,
+          name: extractedApiData.filename || fileToUpload.name,
+          type: "application/pdf",
+          size: fileToUpload.size,
+          data: pdfUrl,
+          uploadCompleted: true,
+          extractedData: extractedApiData,
+        };
+
+        const detailsResponse = {
+          pages: pageCount,
+          anomalies: 0,
+          extractedElements: 0,
+          missingElements: 0,
+          successMessage:
+            "Your file has been identified from the master documents inventory, associated with an active plan and no data anomalies were found.",
+        };
+
+        setUploadDetails(detailsResponse);
+        fileData.uploadDetails = detailsResponse;
+        fileStorage.storeFile(fileId, fileData);
+        setCurrentStoredFile(fileData);
+
+        setLoader(false);
+        setIsProcessing(false);
+        setShowDataExtraction(true);
+      } else {
+        setLoader(false);
+        setIsProcessing(false);
       }
-
+    } catch (err) {
+      console.error("Upload Failed", err);
+      alert("Upload Failed");
+      setUploading(false);
+      setIsProcessing(false);
+      setLoader(false);
     }
-  }, [uploadProgress, extractionprogress, file]);
+  };
 
   useEffect(() => {
     if (extractedElementsCount > 0 && uploadDetails) {
@@ -249,160 +295,9 @@ const UploadFileScreen = () => {
       setUploadDetails(updatedDetails);
     }
   }, [extractedElementsCount]);
-  const [progressData, setProgressData] = useState(null);
-
-  useEffect(() => {
-    if (uploadProgress === 100) {
-      socketStartExtraction();
-    }
-  }, [uploadProgress]);
-
-
-  const socketStartExtraction = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const socket = new SockJS(`${import.meta.env.VITE_AI_EXTRACT}/ws`);
-      const stompClient = Stomp.over(socket);
-      stompClient.connect({}, async () => {
-        const formData = new FormData();
-        formData.append("file", file);
-
-        const response = await axios.post(
-          `${import.meta.env.VITE_AI_EXTRACT}/api/upload`,
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        const { submissionId, fileName } = response.data.data;
-
-        dispatch(
-          updateProgressState({
-            submissionId,
-            fileName,
-          })
-        );
-        stompClient.subscribe(
-          `/topic/ingestion-status/${submissionId}`,
-          (message) => {
-            const data = JSON.parse(message.body);
-
-            setProgressData(data.progress);
-            dispatch(updateProgressState({ status: data.status }));
-            dispatch(setExtractionProgress(data.progress));
-            setExtractionData(data);
-           
-            if (data.progress === 100) {
-              fetchMindmapData(submissionId, token);
-              stompClient.disconnect();
-              console.log(" Socket disconnected")
-
-            }
-          }
-        );
-      });
-
-      return stompClient;
-
-    } catch (error) {
-      console.error("❌ Error starting extraction:", error);
-    }
-  };
-
-
-  const fetchMindmapData = async (submissionId, token) => {
-    try {
-      //setLoader(true)
-      setLoading(true);
-      setLoadingText("Extracting Document....");
-      const response = await axios.get(
-        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document/${submissionId}`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const mindmapData = response.data?.data.mindmap;
-      const validateData = response.data?.data.validate;
-      const headerInformation = response.data?.data.mindmap.headerInformation;
-      setHeaderData(headerInformation)
-      setApiExtractedData(validateData)
-      setMinddata(mindmapData);
-       setDocumentinventoryid(response.data?.data.documentInventoryId)
-       console.log("documentinventoryid",response.data?.data)
-      const pdfdata = response.data?.data;
-      if (pdfdata) {
-
-        let pdfUrl = pdfdata.pdf_data?.startsWith("data:")
-          ? pdfdata.pdf_data
-          : pdfdata.pdf_data
-            ? `data:application/pdf;base64,${pdfdata.pdf_data}`
-            : null;
-
-        const fileData = {
-          id: generateFileId(),
-          name: pfileName || "",
-          type: "application/pdf",
-          //size: fileInput?.size,
-          data: pdfUrl,
-          uploadCompleted: true,
-
-        };
-
-        fileStorage.storeFile(fileData.id, fileData);
-        setCurrentStoredFile(fileData);
-        setShowDataExtraction(true);
-        //setLoader(false);
-        setLoading(false);
-      }
-
-      return mindmapData;
-    } catch (err) {
-      //setLoader(false)
-      setLoading(false);
-      console.error("❌ Mindmap fetch failed:", err);
-      return null;
-    }
-  };
-
-
-
-
 
   const renderUploadCard = () => {
-    if (!file && extractionprogress !== 100) return null;
-    if (pprogress === 100 || extractionprogress === 100) {
-      return (
-        <p
-          style={{
-            fontSize: "15px",
-            fontWeight: "600",
-            color: "#212121",
-            marginTop: "10px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-          }}
-        >
-          <span style={{ display: "flex", alignItems: "center" }}>
-            <img
-              src={tickmark}
-              alt="success"
-              style={{ color: '#00802B' }}
-            />
-          </span>
-
-          <span style={{ color: '#00802B', fontSize: '14px' }}>File uploaded successfully</span>
-        </p>
-      );
-    }
+    if (!file) return null;
 
     return (
       <div
@@ -424,15 +319,29 @@ const UploadFileScreen = () => {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {/* <img src={pdfIcon} alt="PDF" style={{ width: 24, height: 24 }} /> */}
-            <span style={{ fontSize: "16px", color: "#212121", fontWeight: "600" }}>
-              Uploading File... <span style={{ fontSize: "14px", color: "#4A4A4B", fontWeight: "600" }}>{file?.name}</span>
+            <img src={pdfIcon} alt="PDF" style={{ width: 24, height: 24 }} />
+            <span
+              style={{ fontSize: "16px", color: "#000", fontWeight: "600" }}
+            >
+              {file?.name}
             </span>
           </div>
-          <ProgressText>{`${uploadProgress}%`}</ProgressText>
+          <ProgressText>
+            {uploadProgress < 100
+              ? `${uploadProgress}% Complete`
+              : isProcessing
+                ? "Processing..."
+                : "100% Complete"}
+          </ProgressText>
         </div>
-
-        <div style={{ height: "12px", borderRadius: "8px", overflow: "hidden" }}>
+        <div
+          style={{
+            height: "12px",
+            marginTop: "8px",
+            borderRadius: "8px",
+            overflow: "hidden",
+          }}
+        >
           <div
             style={{
               height: "100%",
@@ -442,212 +351,65 @@ const UploadFileScreen = () => {
             }}
           ></div>
         </div>
+        {uploadProgress < 100 && (
+          <p style={{ fontSize: "14px", color: "#555" }}>
+            Uploading file... Please wait.
+          </p>
+        )}
 
-        <p style={{ fontSize: "13px", color: "#444", textAlign: "left" }}>
-          <img
-            src={BackgroundIcon}
-            alt="info"
-            style={{ width: "12px", height: "12px", marginRight: "4px" }}
-          />In progress.. this may take a few seconds
-        </p>
-      </div>
-    );
-  };
+        {uploadProgress === 100 && isProcessing && (
+          <p style={{ fontSize: "14px", color: "#555" }}>
+            Processing file data... Please wait.
+          </p>
+        )}
 
-
-
-  const ExtractionCard = (progress) => {
-    if (progress === undefined || progress === null) return null;
-
-    return (
-      <div
-        style={{
-          border: "1px solid #00837A",
-          borderRadius: "8px",
-          padding: "12px",
-          background: "#FAFBFC",
-          marginTop: "10px",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-
-            {(progress === 100 || extractionprogress === 100) ? (
-              <>
-                {/* SUCCESS HEADER (full width, no side padding) */}
-                <div
-                  style={{
-                    background: "#E1F3EB",
-                    borderRadius: "6px 6px 0 0",
-
-                    /* FULL WIDTH FIX */
-                    marginLeft: "-12px",
-                    marginRight: "-12px",
-                    marginTop: "-12px",
-                    height: '34px',
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      fontWeight: 600,
-                      paddingLeft: '12px',
-                      fontSize: "15px",
-                      color: "#00802B",
-                    }}
-                  >
-                    <img src={tickmark} alt="success" />
-                    <span>File extracted successfully</span>
-                  </div>
-                </div>
-
-                {/* FILE NAME */}
-                <div
-                  style={{
-                    fontWeight: 600,
-                    fontSize: "14px",
-                    color: "#212121",
-                    textAlign: "left",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  {pfileName}
-                </div>
-              </>
-            ) : (
-              <>
-                {/* EXTRACTING HEADER (full width, no side padding) */}
-                <div
-                  style={{
-                    background: "#E1F3EB",
-                    borderRadius: "6px 6px 0 0",
-
-                    /* FULL WIDTH FIX */
-                    marginLeft: "-12px",
-                    marginRight: "-12px",
-                    marginTop: "-12px",
-                    height: '34px',
-                    display: "flex",
-                    alignItems: "center",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#006172",
-                    }}
-                  >
-                    Extracting File...
-                  </div>
-                </div>
-
-                {/* FILE NAME BELOW */}
-                {/* ROW: File name (left) + Status (right) */}
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    width: "100%",
-                  }}
-                >
-                  {/* LEFT: FILE NAME */}
-                  <div
-                    style={{
-                      fontWeight: 600,
-                      fontSize: "14px",
-                      color: "#212121",
-                      textAlign: "left",
-                      wordBreak: "break-word",
-                      flex: 1,
-                      paddingRight: "10px",
-                    }}
-                  >
-                    {pfileName}
-                  </div>
-
-                  {/* RIGHT: STATUS */}
-                  <span style={{ fontSize: "14px", color: "#132e32ff", whiteSpace: "nowrap" }}>
-                    {pstatus} {extractionprogress === 100 ? "" : `${progress}%`}
-                  </span>
-                </div>
-
-              </>
-            )}
-          </div>
-
-          {/* STATUS RIGHT SIDE */}
-
-        </div>
-
-        {/* PROGRESS BAR — hidden if progress 100 */}
-        {extractionprogress === 100 ? '' : (
-          <div
-            style={{
-              height: "12px",
-              background: "#E0E0E0",
-              borderRadius: "8px",
-              overflow: "hidden",
-              marginBottom: "8px",
-              marginTop: "8px",
-            }}
-          >
+        {uploadProgress === 100 && !isProcessing && uploadDetails && (
+          <>
+            <p
+              style={{
+                fontSize: "15px",
+                fontWeight: "600",
+                color: "#212121",
+                textAlign: "left",
+                marginTop: "0",
+              }}
+            >
+              <strong style={{ color: "#006172" }}>Success!</strong>{" "}
+              {uploadDetails.successMessage}
+            </p>
             <div
               style={{
-                height: "100%",
-                width: `${progress}%`,
-                background: "#00796B",
-                transition: "width 0.3s ease",
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                rowGap: "4px",
+                columnGap: "30px",
+                fontSize: "14px",
+                textAlign: "left",
               }}
-            ></div>
-          </div>
-        )}
-
-        {/* FOOTER MESSAGE */}
-        {(progress === 100 || extractionprogress === 100) ? (
-          <p style={{ fontSize: "13px", color: "#444", textAlign: "left" }}>
-            <img
-              src={BackgroundIcon}
-              alt="infotab"
-              style={{ width: "12px", height: "12px", marginRight: "4px" }}
-            />
-            Mind Map & Validation are now ready&nbsp;
-          </p>
-        ) : (
-          <p className="loading-text">
-            <img src={spinnerbox} alt="loading" className="hourglass-spin" />
-            <span className="loading-message">
-
-              Extraction may take a few minutes. It will continue in the background, so you can navigate to other pages...
-              {/* <span className="dot-animate">...</span> */}
-            </span>
-          </p>
-
-
+            >
+              <span>
+                Document Pages: <strong>{uploadDetails.pages}</strong>
+              </span>
+              <span>
+                Data Anomalies: <strong>{uploadDetails.anomalies}</strong>
+              </span>
+              <span>
+                Data elements extracted:{" "}
+                <strong>{uploadDetails.extractedElements}</strong>
+              </span>
+              <span>
+                Missing Data Elements:{" "}
+                <strong>{uploadDetails.missingElements}</strong>
+              </span>
+            </div>
+          </>
         )}
       </div>
     );
   };
-
 
 
   const uploadLabels = UPLOAD_CONFIG.getUploadLabels();
-  const handleChatPropmptClick = () => {
-    setShowChatWindow(true);
-  };
-  const handleUploadTextClick = () => {
-    setShowChatWindow(false);
-  };
-  const isValidateDisabled =
-    !apiExtractedData ||
-    (Array.isArray(apiExtractedData) && apiExtractedData.length === 0) ||
-    (typeof apiExtractedData === "object" && Object.keys(apiExtractedData).length === 0);
 
   return (
     <div style={{ marginTop: "40px" }}>
@@ -658,217 +420,76 @@ const UploadFileScreen = () => {
             style={{ color: "#00837A" }}
             onClick={handleStrIntelligenceNavigation}
           >
-            Dashboard
+            STR Intelligence
           </a>
         </Breadcrumb.Item>
         <Breadcrumb.Item>
-          <span
-            style={{ color: "black", cursor: "pointer", fontWeight: 600 }}
-            onClick={handleUploadTextClick}
-          >
-            Upload
-          </span>
+          <span style={{ color: "black" }}>Upload</span>
         </Breadcrumb.Item>
-        {showChatWindow && (
-          <Breadcrumb.Item>
-            <span
-              style={{ color: "black", cursor: "pointer", fontWeight: 600 }}
-              onClick={handleChatPropmptClick}
-            >
-              Chat
-            </span>
-          </Breadcrumb.Item>
-        )}
       </Breadcrumb>
 
-      <>
-        {showChatWindow ? (
-          <ChatPropmpt />
-        ) : (
-          <Spin spinning={loading} tip={loadingText} size="large" style={{ color: '#212121', fontWeight: 600 }}>
-            <DashboradStyled>
-              <Row gutter={[16, 16]} className="dashboard-row">
-                <Col xs={24} xl={24} lg={24} md={24}>
-                  <Card className="dashboard-card">
-                    <UploadHeader style={{ marginTop: "-20" }}>
-                      <UploadTitle>
-                        {staticText[role].widgets.uploadFile.title}
-                      </UploadTitle>
-                    </UploadHeader>
+      <DashboradStyled>
+        <Row gutter={[16, 16]} className="dashboard-row">
+          <Col xs={24} xl={24} lg={24} md={24}>
+            <Card className="dashboard-card">
+              <UploadHeader style={{ marginTop: "-20" }}>
+                <UploadTitle>
+                  {staticText[role].widgets.uploadFile.title}
+                </UploadTitle>
+              </UploadHeader>
 
-                    <div style={{ position: "relative", minHeight: "150px" }}>
-                      {(pprogress === null || pprogress === 0) && (
-                        <div
-                          style={{
-                            opacity: uploading ? 0 : 1,
-                            transition: "opacity 0.5s ease",
-                          }}
-                        >
-                          <FileUploadContainer
-                            onFileUpload={handleUpload}
-                            supportedFormats={uploadLabels.formats}
-                            label1={uploadLabels.label1}
-                            label2={uploadLabels.label2}
-                          />
-                        </div>
-                      )}
+              <div style={{ position: "relative", minHeight: "150px" }}>
+                {!file && (
+                  <div
+                    style={{
+                      opacity: uploading ? 0 : 1,
+                      transition: "opacity 0.5s ease",
+                    }}
+                  >
+                    <FileUploadContainer
+                      onFileUpload={handleUpload}
+                      supportedFormats={uploadLabels.formats}
+                      label1={uploadLabels.label1}
+                      label2={uploadLabels.label2}
+                    />
+                  </div>
+                )}
 
+                {file && (
+                  <>
+                    {renderUploadCard()}
 
-                      <>
-
-                        {(pprogress == 100 || extractionprogress === 100) && renderUploadCard()}
-                        {(uploadProgress === 100 || extractionprogress > 0 || progressData > 0) &&
-                          ExtractionCard(extractionprogress || 0)}
-
-
-                        {showDataExtraction && currentStoredFile && (
-                          <div style={{ marginTop: "20px" }}>
-                            <ExtractedInfoTable extractedData={headerData} />
-                          </div>
-                        )}
-                      </>
-
-                    </div>
-                  </Card>
-                </Col>
-              </Row>
-              {/*  */}
-              <>
-                <Row gutter={[16, 16]} className="dashboard-row">
-                  <Col xs={24} xl={24} lg={24} md={24}>
-                    {extractionprogress === 100 ? (
-                      // showDataExtraction && currentStoredFile ? (
-                      <>
-                        <Card className="dashboard-card">
-                          <div>
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                width: "100%",
-                                minHeight: "48px",
-                              }}
-                            >
-                              {activeTab === "mindmap" ? (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "flex-start",
-                                  }}
-                                >
-                                  <div style={{ fontSize: "16px", fontWeight: 600, color: "#212121" }}>
-                                    {pfileName}
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "13px",
-                                      color: "#737791",
-                                      fontWeight: 400,
-                                      marginBottom: "20px",
-                                    }}
-                                  >
-                                    Document structure and legal information
-                                  </div>
-                                </div>
-                              ) : (
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    alignItems: "flex-start",
-                                  }}
-                                >
-                                  <div style={{ fontSize: "16px", fontWeight: 600, color: "#212121" }}>
-                                    Extracted data comparison with PDF document
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "13px",
-                                      color: "#737791",
-                                      fontWeight: 400,
-                                    }}
-                                  >
-                                    Facilitate human validation of AI-extracted information
-                                  </div>
-                                  <div style={{
-                                    fontSize: "14px",
-                                    color: "#006172",
-                                    fontWeight: 600,
-                                    marginBottom: "20px",
-                                  }}> Please review the key information from the document before committing
-                                    the data.</div>
-                                </div>
-                              )}
-
-                              <div className="switch-container">
-                                <button
-                                  disabled={isValidateDisabled}
-                                  className={`switch-btn ${activeTab === "validate" ? "active" : ""} ${isValidateDisabled ? "disabled-btn" : ""
-                                    }`}
-                                  onClick={() => !isValidateDisabled && setActiveTab("validate")}
-                                >
-                                  Validate
-                                </button>
-
-                                <button
-                                  className={`switch-btn ${activeTab === "mindmap" ? "active" : ""}`}
-                                  onClick={() => setActiveTab("mindmap")}
-                                >
-                                  Mind Map
-                                </button>
-                                
-                              </div>
-                            </div>
-
-                            {activeTab === "mindmap" && <TreeMapView data={minddata} />}
-                            {activeTab === "validate" && (
-                              <DataExtractionScreen
-                                key={currentStoredFile?.id}
-                                uploadedFile={null}
-                                uploadedFileName={pfileName}
-                                uploadedFileUrl={currentStoredFile?.data}
-                                storedFileData={currentStoredFile}
-                                apiExtractedData={apiExtractedData}
-                                onDataFieldsCountChange={handleDataFieldsCountChange}
-                                documentinventoryid={documentinventoryid}
-                              />
-                            )}
-                          </div>
-                        </Card>
-                        <div className="chatbot-float">
-                          <img src={ChatPromptIcon} alt="chat-prompt" onClick={handleChatPropmptClick} />
-                        </div>
-                      </>
-                      // ) : null
-                    ) : (
-                      <Card className="dashboard-card">
-                        <div
-                          style={{
-                            fontSize: "14px",
-                            color: "#737791",
-                            textAlign: "center",
-                            padding: "50px 0",
-                          }}
-                        >
-                          <span><img
-                            src={timericon}
-                            alt="timerinfo"
-                            style={{ width: "12px", height: "12px", marginRight: "4px" }}
-                          /> Mind Map & Validation will appear <b>here</b> once extraction is complete
-                          </span>   </div>
-                      </Card>
+                    {showDataExtraction && currentStoredFile && (
+                      <div style={{ marginTop: "20px" }}>
+                        <ExtractedInfoTable extractedData={apiExtractedData} />
+                      </div>
                     )}
-                  </Col>
-                </Row>
-
-              </>
-              {/* )} */}
-            </DashboradStyled>
-          </Spin>
+                  </>
+                )}
+              </div>
+            </Card>
+          </Col>
+        </Row>
+        {showDataExtraction && currentStoredFile && (
+          <Row gutter={[16, 16]} className="dashboard-row">
+            <Col xs={24} xl={24} lg={24} md={24}>
+              <Card className="dashboard-card">
+                <div style={{ marginTop: "20px" }}>
+                  <DataExtractionScreen
+                    key={currentStoredFile.id} // Force re-render with key
+                    uploadedFile={null}
+                    uploadedFileName={currentStoredFile.name}
+                    uploadedFileUrl={currentStoredFile.data}
+                    storedFileData={currentStoredFile}
+                    apiExtractedData={apiExtractedData}
+                    onDataFieldsCountChange={handleDataFieldsCountChange}
+                  />
+                </div>
+              </Card>
+            </Col>
+          </Row>
         )}
-      </>
+      </DashboradStyled>
     </div>
   );
 };

@@ -102,8 +102,9 @@ const UploadFileScreen = () => {
   const role = user.role;
   const { setLoader } = useLoader();
   const [extractedElementsCount, setExtractedElementsCount] = useState(0);
+   const [documentinventoryid, setDocumentinventoryid] = useState(null);
   const [showChatWindow, setShowChatWindow] = useState(false);
-  const [activeTab, setActiveTab] = useState("mindmap");
+  const [activeTab, setActiveTab] = useState("validate");
   const [, setExtractionData] = useState(null);
   const [minddata, setMinddata] = useState({});
   const [headerData, setHeaderData] = useState({});
@@ -151,7 +152,7 @@ const UploadFileScreen = () => {
   };
 
   const handleStrIntelligenceNavigation = (e) => {
-    e.preventDefault();
+    // e.preventDefault();
 
     resetComponentState();
 
@@ -267,7 +268,7 @@ const UploadFileScreen = () => {
         formData.append("file", file);
 
         const response = await axios.post(
-          `${import.meta.env.VITE_AI_EXTRACT}/api/v1/document-ingestion/upload`,
+          `${import.meta.env.VITE_AI_EXTRACT}/api/upload`,
           formData,
           {
             headers: {
@@ -294,7 +295,7 @@ const UploadFileScreen = () => {
             dispatch(updateProgressState({ status: data.status }));
             dispatch(setExtractionProgress(data.progress));
             setExtractionData(data);
-
+           
             if (data.progress === 100) {
               fetchMindmapData(submissionId, token);
               stompClient.disconnect();
@@ -317,9 +318,9 @@ const UploadFileScreen = () => {
     try {
       //setLoader(true)
       setLoading(true);
-      setLoadingText("Drawing Mindmap...");
+      setLoadingText("Extracting Document....");
       const response = await axios.get(
-        `${import.meta.env.VITE_AI_EXTRACT}/api/v1/document-ingestion/extract-document/${submissionId}`,
+        `${import.meta.env.VITE_AI_EXTRACT}/api/get_extracted_document/${submissionId}`,
         {
           headers: {
             "Content-Type": "application/json",
@@ -334,6 +335,8 @@ const UploadFileScreen = () => {
       setHeaderData(headerInformation)
       setApiExtractedData(validateData)
       setMinddata(mindmapData);
+       setDocumentinventoryid(response.data?.data.documentInventoryId)
+       console.log("documentinventoryid",response.data?.data)
       const pdfdata = response.data?.data;
       if (pdfdata) {
 
@@ -766,7 +769,7 @@ const UploadFileScreen = () => {
                                       marginBottom: "20px",
                                     }}
                                   >
-                                    Document structure and legal plan provisions
+                                    Document structure and legal information
                                   </div>
                                 </div>
                               ) : (
@@ -787,7 +790,7 @@ const UploadFileScreen = () => {
                                       fontWeight: 400,
                                     }}
                                   >
-                                    Facilitate human validation of AI-extracted plan provisions
+                                    Facilitate human validation of AI-extracted information
                                   </div>
                                   <div style={{
                                     fontSize: "14px",
@@ -795,18 +798,11 @@ const UploadFileScreen = () => {
                                     fontWeight: 600,
                                     marginBottom: "20px",
                                   }}> Please review the key information from the document before committing
-                                    the data to the plan documents inventory.</div>
+                                    the data.</div>
                                 </div>
                               )}
 
                               <div className="switch-container">
-                                <button
-                                  className={`switch-btn ${activeTab === "mindmap" ? "active" : ""}`}
-                                  onClick={() => setActiveTab("mindmap")}
-                                >
-                                  Mind Map
-                                </button>
-
                                 <button
                                   disabled={isValidateDisabled}
                                   className={`switch-btn ${activeTab === "validate" ? "active" : ""} ${isValidateDisabled ? "disabled-btn" : ""
@@ -815,19 +811,28 @@ const UploadFileScreen = () => {
                                 >
                                   Validate
                                 </button>
+
+                                <button
+                                  className={`switch-btn ${activeTab === "mindmap" ? "active" : ""}`}
+                                  onClick={() => setActiveTab("mindmap")}
+                                >
+                                  Mind Map
+                                </button>
+                                
                               </div>
                             </div>
 
                             {activeTab === "mindmap" && <TreeMapView data={minddata} />}
                             {activeTab === "validate" && (
                               <DataExtractionScreen
-                                key={currentStoredFile.id}
+                                key={currentStoredFile?.id}
                                 uploadedFile={null}
                                 uploadedFileName={pfileName}
-                                uploadedFileUrl={currentStoredFile.data}
+                                uploadedFileUrl={currentStoredFile?.data}
                                 storedFileData={currentStoredFile}
                                 apiExtractedData={apiExtractedData}
                                 onDataFieldsCountChange={handleDataFieldsCountChange}
+                                documentinventoryid={documentinventoryid}
                               />
                             )}
                           </div>
